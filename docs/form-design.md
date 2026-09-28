@@ -434,6 +434,63 @@ também é ignorado quando não existe field original correspondente. Nomes de
 fields e relações de pai são, portanto, parte do contrato entre o produto e a
 spec.
 
+#### Modelo usual: seção adicional em Pessoa
+
+Em forms de edição de pessoa, o uso mais comum de um form `.strategy%` é
+acrescentar uma seção visual completa ao form principal, e não somente
+JavaScript. A exceção — uma strategy usada apenas para assets ou comportamento
+frontend — continua válida, mas não deve ser tratada como o formato padrão.
+
+No form
+`plusoftcrm.person.forms.crm_ticket.crm_person.edit`, o JavaScript principal
+executa `buildNavs()` e monta a navegação a partir dos widgets visíveis que
+correspondem a `.row div[role=app-widget]`. Para que uma seção de strategy
+participe dessa navegação, sua estrutura deve conter:
+
+1. uma `DIV` raiz de linha Bootstrap 3 (`class="row"`), com `id` estável;
+2. uma coluna interna, normalmente `col-xs-12`;
+3. um `WIDGET` com `role="app-widget"`, `id` estável e título/texto;
+4. dentro do widget, as linhas e colunas Bootstrap com labels e campos nos
+   mesmos padrões do form principal.
+
+O `id` do widget é o identificador técnico da âncora criada por `buildNavs()`;
+o texto de `.widget-title` é o rótulo exibido nela. O `id` da row preserva a
+estrutura identificável e facilita a manutenção. Fields soltos ou widgets sem
+`id`/título podem ser renderizados, mas não aparecerão corretamente na
+navegação da Pessoa.
+
+Quando a seção precisa persistir dados específicos da pessoa, o modelo usual é
+uma entity relacionada 1:1 com `CRM_PERSON`, contendo `ID_PERSON` como FK.
+Os inputs da strategy devem estar ligados a essa entity. O save padrão do form
+persiste esses campos dentro do fluxo mestre-detalhe; para o contrato de
+binding, relação e save, consultar [`form-data-binding.md`](form-data-binding.md).
+
+#### Criação de um form strategy
+
+Strategy é um form v1 cadastrado previamente no Studio. Para criá-lo, usar
+exclusivamente o módulo ativo selecionado no kit para o workspace e ambiente
+atuais. A seleção é persistida pela extensão; não a inferir pela chave do form
+base, pelo assunto da demanda ou pelo módulo que originalmente possui o form.
+Sem uma seleção válida, interromper o fluxo e solicitar que o usuário selecione
+o módulo no kit.
+
+Para uma strategy de um form `{formKey}`, a chave usa o sufixo
+`.strategy.{finalidade}`. A finalidade deve ser estável, minúscula e adequada
+para diferenciar a spec, por exemplo:
+
+```text
+form base: plusoftcrm.person.forms.crm_ticket.crm_person.edit
+strategy:  plusoftcrm.person.forms.crm_ticket.crm_person.edit.strategy.corporatedata
+nome:      Pessoa - Strategy - Dados Corporativos
+```
+
+Após o cadastro, baixar o form recém-criado pela sua chave e publicar o design
+inicial. Para uma seção navegável de Pessoa, esse design já deve conter a row,
+a coluna e o widget com `id` e título, ainda que não possua fields com binding.
+O cadastro de um form não cria entities, FKs, labels ou patterns; eles exigem
+os respectivos recursos previamente cadastrados quando a strategy passar a
+precisar deles.
+
 #### Hooks de business
 
 `executeAction()` obtém o form de `args.form` ou de `args.renderContext`. Para

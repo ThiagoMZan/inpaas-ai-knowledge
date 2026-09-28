@@ -22,6 +22,8 @@ Leia integralmente os documentos aplicáveis em `docs/`:
   traduções;
 - `import-layouts.md` para arquivos de entrada, layouts de importação ou
   mapeamento de colunas para entidades.
+- `entity-management.md` para criação, alteração e publicação de entities,
+  atributos, PKs, FKs, índices e labels.
 
 Leia também o `AGENTS.md` do projeto em que o trabalho será realizado. As
 regras do projeto complementam esta base, sem repetir regras reutilizáveis.
