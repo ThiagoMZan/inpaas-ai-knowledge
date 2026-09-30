@@ -50,6 +50,30 @@ quando essas coleções forem enviadas: elas são substituídas. Omitir uma cole
 que não faz parte da alteração; enviar `[]` somente quando a intenção for
 limpá-la.
 
+Na atualização, atributos já existentes precisam manter o `id` baixado da
+plataforma. Um atributo realmente novo ainda não possui `id` e deve ser
+publicado sem ele; o instalador atribui o ID. A validação compara o nome de
+cada atributo com o cache: só rejeita ID ausente se aquele nome já existia,
+além de rejeitar IDs divergentes. Não exigir ID de todos os atributos de uma
+entity existente.
+
+O cache pode devolver um `DatabaseEntity` com `moduleId` (sem `module`),
+`audit` booleano, flags `auditInsert`/`auditUpdate`/`auditDelete`, tipos físicos
+e nome da PK apenas no atributo. O download do kit normaliza esses campos para
+o modelo local (`module`, objeto `audit`, tipos lógicos, `primaryKey` técnico e
+marcador booleano da PK). O publicador também aceita arquivos antigos ainda
+não normalizados; não é necessário sobrescrever um JSON editado somente para
+obter essa correção.
+
+Uma falha em `setEntity` pode deixar o objeto de entity em memória parcialmente
+alterado mesmo sem gravar os metadados no banco. Sinais observados: atributos
+com `id: null` e FKs ausentes no download, enquanto `CAMPOBD` e
+`OBJETOBD.TX_JSONREFS` permanecem íntegros. Uma cópia reconstruída do banco
+só pode substituir a entity no cache ativo depois de conferir também o SQL de
+todas as queries. Se ele estiver ausente, interromper o download sem trocar o
+cache nem sobrescrever o JSON local. O publicador deve rejeitar um JSON antigo
+com IDs de campos ausentes.
+
 ### Atributos
 
 O `patchEntity()` aceita os nomes lógicos de tipo usados pelo editor:
@@ -148,6 +172,15 @@ item de `includes` informa `name`. Para reforçar uma relação 1:1 no banco, o
 Queries usam `id` quando já existentes, `key`, `sql`, `type`, `finalVersion` e
 `moduleId`. A primeira query com `type: "F"` é tratada como a query de FK pela
 plataforma. Triggers são encaminhadas como objetos da coleção `triggers`.
+
+O `DatabaseEntity` serializado no download expõe o texto SQL como `query`,
+enquanto `inpaas.core.entity.admin.patchEntity()` lê `sql` no payload de
+publicação. O adaptador deve copiar `query` para `sql` e rejeitar uma query com
+key e SQL vazio antes de chamar `setEntity()`. Um download com query sem SQL
+também deve falhar sem sobrescrever o JSON local. Não reconstruir o cache só
+com `EntityCacheLoader.createEntityCache(context, null)` para recuperar uma
+entity: o `OBJETOBD.TX_JSONQUERIES` pode conter apenas keys, e uma reconstrução
+dessas substitui o SQL em memória por `null`.
 
 Essas coleções não devem ser incluídas em uma alteração simples de atributos
 sem antes baixar e preservar seu conteúdo. A publicação substitui a coleção
