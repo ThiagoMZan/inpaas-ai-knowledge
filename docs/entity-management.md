@@ -15,6 +15,23 @@ editor do kit e pelo endpoint `POST /api/vs-code/entities/publish`.
 - Não atualizar tabelas de metadados ou schema por SQL direto. A publicação usa
   o adaptador de domínio da plataforma.
 
+## Convenção de nomes para desenvolvimento Espec
+
+Antes de criar uma entity, confirmar se a demanda é um desenvolvimento Espec ou
+de produto. Para um desenvolvimento Espec, propor o nome ao usuário e obter sua
+confirmação antes de criar ou publicar a tabela; o usuário pode alterar a
+sugestão.
+
+- Tabela Espec independente: `CST_{DESCRICAO}`, por exemplo `CST_DADOSLOJA`.
+- Tabela Espec filha: `CST_{TABELA_PAI_SEM_PREFIXO}_{DESCRICAO}`. Para
+  `CRM_PERSON`, usar `CST_PERSON_LOJA`; para `CRM_CASE`, usar
+  `CST_CASE_LOJAS`.
+
+Para desenvolvimento de produto, aplicar o prefixo do domínio correspondente,
+como `CRM_`, `MKT_` ou `DATA_`, conforme o padrão do produto afetado. Não usar
+esses prefixos em uma tabela Espec apenas por ela se relacionar a uma entidade
+de produto.
+
 ## Modelo local
 
 O arquivo local segue o nome:
