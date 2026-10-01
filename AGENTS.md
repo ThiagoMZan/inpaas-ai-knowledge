@@ -24,6 +24,8 @@ Leia integralmente os documentos aplicáveis em `docs/`:
   mapeamento de colunas para entidades.
 - `entity-management.md` para criação, alteração e publicação de entities,
   atributos, PKs, FKs, índices e labels.
+- `task-scheduler.md` para consultar e cadastrar tarefas recorrentes do
+  Scheduler vinculadas a sources.
 
 Leia também o `AGENTS.md` do projeto em que o trabalho será realizado. As
 regras do projeto complementam esta base, sem repetir regras reutilizáveis.
