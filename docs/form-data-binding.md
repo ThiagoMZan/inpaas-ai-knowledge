@@ -140,6 +140,97 @@ Fields de uma entity secundária não viram detalhe automaticamente apenas por
 estarem dentro de um container visual. O que determina o agrupamento é o
 binding `entity`/`entity-field` e a referência declarada entre as entities.
 
+### Detalhe 1:1 exibido junto ao mestre
+
+Para dados complementares de um único registro filho por mestre — por exemplo,
+uma ficha de funcionário de uma pessoa ou um cabeçalho de pedido de uma
+ocorrência — usar o mecanismo mestre-detalhe padrão. Não criar uma chamada Ajax
+no `blur` para carregar ou gravar esses campos: eles devem ser enviados no POST
+normal do form juntamente com o mestre.
+
+Pré-requisitos:
+
+- a entity filha tem uma FK para a entity mestre;
+- a cardinalidade 1:1 é garantida por índice único na FK da filha;
+- o form contém fields com `entity` e `entity-field` da filha; e
+- a PK técnica da filha está presente como `HIDDEN` ligado à sua coluna PK.
+
+O hidden permite que o parser identifique um registro já existente como update,
+em vez de tentar inserir outro detalhe. O nome lógico e o `id` HTML são livres,
+mas devem ser estáveis e únicos; os nomes físicos da entity e das colunas são o
+contrato do binding. Exemplo para `CRM_CASE` e a filha `CST_CASE_PEDIDO`:
+
+```xml
+<field entity="CST_CASE_PEDIDO" entity-field="ID_CST_CASE_PEDIDO"
+       type="HIDDEN" fixed="false"
+       name="hdn-cst_case_pedido-id" visible="false">
+  <dependency/><hardcode/>
+  <properties>
+    <property name="id">hdn-cst_case_pedido-id</property>
+  </properties>
+</field>
+
+<field entity="CST_CASE_PEDIDO" entity-field="DS_NUMERO_PEDIDO"
+       type="TEXT" fixed="false" name="case-order-number" visible="true">
+  <dependency/><hardcode/>
+  <properties>
+    <property name="id">case-order-number</property>
+    <property name="class">form-control input-sm</property>
+    <property name="readonly">Y</property>
+  </properties>
+</field>
+
+<field entity="CST_CASE_PEDIDO" entity-field="DT_DATA_ENTREGA"
+       type="TEXT" fixed="false" name="case-delivery-date"
+       format="fieldformat.date" visible="true">
+  <dependency/><hardcode/>
+  <properties>
+    <property name="id">case-delivery-date</property>
+    <property name="class">form-control input-sm</property>
+    <property name="readonly">Y</property>
+  </properties>
+</field>
+```
+
+Use `readonly`, e não `disabled`, quando a interface só deve liberar a edição
+após uma ação como **Editar**. Inputs desabilitados não participam de
+`serialize()` e, portanto, não seguem no save padrão. A strategy pode trocar o
+estado visual com `.prop('readonly', false)`; ela não deve salvar o detalhe.
+
+O registro filho não é preenchido automaticamente pelo binding na abertura. No
+`beforeRender` do Business Delegate ou da business strategy, consultar a filha
+pela FK do mestre e inserir no `data` a PK e todos os atributos usados pelos
+fields. Em strategies despachadas por `plusoftcrm.libs.pattern.strategy`, o
+hook recebe um único objeto com `renderContext` e `data`:
+
+```javascript
+function beforeRender(args) {
+  var data = args.data;
+  var order;
+
+  if (args.renderContext.getFormField() || !data) return;
+
+  order = daoFactory.getDao('CST_CASE_PEDIDO')
+    .filter('id_case')
+    .equalsTo(data.get('id_case'))
+    .findFirst();
+
+  if (!order) return;
+
+  data.put('id_cst_case_pedido', order.id_cst_case_pedido);
+  data.put('ds_numero_pedido', order.ds_numero_pedido);
+  data.put('dt_data_entrega', order.dt_data_entrega);
+}
+
+scope.beforeRender = beforeRender;
+```
+
+Ignorar renderização de field isolado evita consultas repetidas. Se não houver
+filho, não preencher a PK: no primeiro save o delegate criará o detalhe e
+injetará a FK do mestre conforme a referência modelada. Nunca usar nomes de
+colunas copiados de outro ambiente; consultar a entity baixada e usar seus
+nomes físicos reais.
+
 ## Hooks do DynaFormBusinessDelegate
 
 Os hooks mais usados são:
@@ -161,10 +252,121 @@ atribui o retorno do hook a uma variável, mas continua persistindo o objeto
 `maindata` original. Retornar um novo objeto sem modificar o argumento não
 substitui efetivamente os dados usados pelo save nessa versão.
 
+### Validações gerais antes de gravar uma Ocorrência
+
+Em uma strategy que estende `plusoftcrm.case.forms.crm_ticket.crm_case.edit`,
+as validações gerais que podem bloquear a gravação da Ocorrência devem ser
+declaradas na função `beforeSaveCase(event)`. Ela é acionada diretamente pelo
+botão de salvar, antes do handler delegado do form-base; quando a regra falhar,
+deve chamar `event.preventDefault()` e `event.stopImmediatePropagation()`,
+apresentar uma mensagem acionável e devolver `false`.
+
+Não associar essa regra a `change` ou `blur` de um campo específico, como a data
+de conclusão: isso mistura a validação de fechamento com a edição do campo e
+pode alterar valores antes da tentativa efetiva de salvar. A função deve
+permitir o save quando a condição não se aplica e focar o primeiro campo inválido
+quando bloquear a operação.
+
+```javascript
+function beforeSaveCase(event) {
+  if (!mustBlockSave()) return true;
+
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  $.notify('Corrija os dados obrigatórios antes de salvar.', {
+    autoHide: false,
+    className: 'error'
+  });
+  scope.find(firstInvalidSelector()).focus();
+  return false;
+}
+
+scope.find('button[role=case-save]')
+  .off('click.strategyBeforeSaveCase')
+  .on('click.strategyBeforeSaveCase', beforeSaveCase);
+```
+
 Em Nashorn, é comum o source retornar uma extensão de
 `DynaFormBusinessDelegate`, recebendo `scriptContext` e o binding global
 `form`. Ao modificar esses hooks, preservar o contrato `TO`/coleções Java e os
 IDs internos usados como chaves de `children`.
+
+## Telas de configuração com registro único
+
+Uma tela de configuração única abre diretamente o form de edição a partir do
+menu; ela não usa listagem para escolher registros. O padrão se aplica somente
+quando o produto define que a tabela possui uma única configuração lógica.
+
+O form deve estar vinculado a um source de Business Delegate já cadastrado no
+Studio. A implementação carrega o registro existente em `beforeRender` e
+sobrescreve `set(data, id)` para encaminhar a gravação com a PK encontrada.
+`beforeSet` sozinho não é suficiente para escolher insert ou update, pois a
+decisão de persistência usa o `id` recebido por `set`.
+
+```javascript
+(function () {
+  'use strict';
+
+  var DynaFormBusinessDelegate = Java.extend(
+    Java.type('br.com.inpaas.forms.businessdelegate.DynaFormBusinessDelegate')
+  );
+  var daoFactory = require('inpaas.core.entity.dao');
+  var ENTITY = 'CST_CONFIG_EXAMPLE';
+  var PRIMARY_KEY = 'id_cst_config_example';
+  var instance;
+  var parent;
+
+  function getConfiguration() {
+    return daoFactory.getDao(ENTITY).findFirst();
+  }
+
+  function beforeRender(renderContext, data) {
+    var record = getConfiguration();
+    if (record) {
+      data.put(PRIMARY_KEY, record[PRIMARY_KEY]);
+      data.put('ds_example', record.ds_example);
+    }
+    return data;
+  }
+
+  function set(data, id) {
+    var record = getConfiguration();
+    if (record) {
+      id = record[PRIMARY_KEY];
+    }
+    return parent.set(data, id);
+  }
+
+  instance = new DynaFormBusinessDelegate(scriptContext, form) {
+    beforeRender: beforeRender,
+    set: set
+  };
+  parent = Java.super(instance);
+  return instance;
+})();
+```
+
+Regras obrigatórias:
+
+- Criar `instance` antes de chamar `Java.super(instance)`; obter o super antes
+  da instância existir deixa o delegate inválido.
+- Usar a PK efetivamente retornada da tabela. Nunca substituir o `id` por uma
+  constante como `1`: sequences, migrações ou registros já existentes não
+  garantem esse valor.
+- Quando não houver registro, manter o `id` recebido vazio para que o primeiro
+  salvamento faça o insert; nas gravações seguintes, usar a PK existente para
+  fazer update.
+- Copiar para `data` todos os campos que o form precisa renderizar, incluindo a
+  PK, usando as chaves expostas pelo DAO.
+- No design, manter somente Salvar, com retorno ao próprio form. Remover ações
+  de excluir, duplicar, salvar como novo e navegação para listagem.
+- Restringir a permissão de exclusão do form. A remoção do botão não protege
+  uma chamada HTTP `DELETE` feita diretamente.
+
+Esse delegate protege o fluxo do form, mas não substitui uma restrição de banco
+quando a unicidade precisa valer também para integrações, SQL administrativo ou
+outros pontos de gravação concorrentes. Nesses casos, modelar uma garantia de
+unicidade na entity antes de publicar a solução.
 
 ## Metadados necessários para criar um field
 

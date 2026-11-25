@@ -1,0 +1,3 @@
+interface:
+  display_name: "inPaaS Entities"
+  short_description: "Safely create and change inPaaS entities"

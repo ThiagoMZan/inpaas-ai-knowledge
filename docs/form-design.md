@@ -127,6 +127,107 @@ gerados e a sequência é reconstruída pela ordem da árvore. Por isso nomes de
 campos devem ser únicos e estáveis dentro do form. Ao renomear um campo, revisar
 dependências que apontem para seu `field-name`.
 
+### Estrutura de form modal
+
+Um form aberto por `dynaform.modal(...)` precisa declarar a moldura modal no
+próprio XML. Um conjunto de widgets sem essa hierarquia pode renderizar como
+conteúdo solto ou receber estilos quebrados. Usar a mesma estrutura Bootstrap
+dos forms modais já exportados pela plataforma:
+
+```text
+DIV.modal-dialog
+└── DIV.modal-content
+    ├── DIV.modal-header
+    │   └── ações e título
+    ├── DIV.modal-body
+    │   └── widgets, filtros e resultado
+    └── DIV.modal-footer
+```
+
+O exemplo mínimo abaixo mantém ações no cabeçalho, como nos forms modais
+legados. O footer pode permanecer vazio quando não houver ação naquele local,
+mas deve existir para preservar o contrato visual:
+
+```xml
+<field name="example-modal-dialog" type="DIV" fixed="false" visible="true">
+  <children>
+    <field name="example-modal-content" type="DIV" fixed="false" visible="true">
+      <children>
+        <field name="example-modal-header" type="DIV" fixed="false" visible="true">
+          <children><!-- título e botões --></children>
+          <dependency/><hardcode/>
+          <properties><property name="class">modal-header</property></properties>
+        </field>
+        <field name="example-modal-body" type="DIV" fixed="false" visible="true">
+          <children><!-- conteúdo --></children>
+          <dependency/><hardcode/>
+          <properties><property name="class">modal-body</property></properties>
+        </field>
+        <field name="example-modal-footer" type="DIV" fixed="false" visible="true">
+          <dependency/><hardcode/>
+          <properties><property name="class">modal-footer</property></properties>
+        </field>
+      </children>
+      <dependency/><hardcode/>
+      <properties><property name="class">modal-content</property></properties>
+    </field>
+  </children>
+  <dependency/><hardcode/>
+  <properties><property name="class">modal-dialog</property></properties>
+</field>
+```
+
+Para filtros, usar `DIV.row` e colunas responsivas (`col-xs-*`, `col-sm-*`),
+com label e input dentro da mesma coluna. Evitar `form-inline` e larguras fixas
+para inputs de busca em um modal, pois eles ultrapassam o diálogo em larguras
+menores. O CSS específico deve ficar delimitado por uma classe própria do
+diálogo, ajustar `padding` de header/body/footer e deixar o corpo com rolagem
+vertical quando o conteúdo puder superar a viewport. Preserve os IDs usados
+pelo JavaScript ao reorganizar a árvore; uma mudança visual não deve quebrar
+eventos delegados ou o container da grade.
+
+### Separação entre design, comportamento e modal
+
+O XML é o contrato da estrutura visual do form. Declarar nele os containers,
+widgets, labels, campos, botões, ações e layout responsivo da tela. Não montar
+uma tela inteira em JavaScript com concatenação de HTML ou `append()`; isso
+contorna o Form Design, dificulta o binding e torna o layout frágil em reloads
+e upgrades.
+
+O JavaScript do form fica restrito a comportamento: eventos, validações locais,
+integração com serviços e atualização pontual de conteúdo que é intrinsecamente
+dinâmico. A exceção usual é a lista de resultados: declarar no XML apenas seu
+container estável e inicializar nele um DataTable. A tabela pode gerar linhas,
+colunas, paginação e ações de linha no JavaScript, mas filtros, labels, botões
+da tela e seus containers continuam declarados no XML.
+
+Um modal não é um `DIV` inserido no design da página pai. Cada modal deve ser
+um form previamente cadastrado, com design, CSS e JavaScript próprios, e ser
+aberto pela API `dynaform.modal`. O form pai só declara o botão que inicia o
+fluxo e escuta o evento emitido pelo modal:
+
+```javascript
+function newProdutoClickEvent(event) {
+  var $button = $(event.currentTarget).omni('block');
+
+  dynaform.modal('module.forms.product.modal', '', {
+    onload: function ($modal) {
+      $button.omni('unblock');
+
+      $modal.on('modal.produto.confirm', function (modalEvent, selections) {
+        // O pai usa a seleção; o modal não conhece a tela que o abriu.
+      });
+    }
+  });
+}
+```
+
+Manter o bloqueio até o callback `onload`, para que o botão não dispare duas
+aberturas durante o carregamento. O modal emite um evento próprio, como
+`modal.produto.confirm`, com os dados selecionados; a página pai faz a ação de
+domínio e atualiza a sua DataTable. Não acoplar o modal a variáveis globais ou
+ao DOM interno de uma página específica.
+
 Tipos atualmente definidos pela plataforma incluem `TEXT`, `COMBOBOX`,
 `CHECKBOX`, `TEXTAREA`, `OPTIONBOX`, `LABEL`, `PASSWORD`, `BUTTON`, `IMAGE`,
 `HIDDEN`, `IFRAME`, `FILE`, `COMBOBOX_FK`, `DIV`, `TAB`, `MULTISELECT`,
@@ -483,6 +584,35 @@ form base: plusoftcrm.person.forms.crm_ticket.crm_person.edit
 strategy:  plusoftcrm.person.forms.crm_ticket.crm_person.edit.strategy.corporatedata
 nome:      Pessoa - Strategy - Dados Corporativos
 ```
+
+#### Isolamento por bloco funcional
+
+Cada bloco funcional independente acrescentado por strategy deve possuir seu
+próprio form v1. Não adicionar XML, JavaScript ou CSS de uma nova guia/seção em
+um form strategy já dedicado a outra funcionalidade. Isso mantém publicação,
+revisão, rollback e evolução de cada bloco independentes.
+
+Para um form pai `{formKey}`, usar:
+
+```text
+chave: {formKey}.strategy.{nomefuncional}
+nome:  {Função Pai} | Strategy | {Nome da Função}
+```
+
+`{nomefuncional}` é estável, minúsculo e sem espaços. Exemplos:
+
+```text
+plusoftcrm.case.forms.crm_ticket.crm_case.edit.strategy.guiaprodutos
+Ocorrência Edição | Strategy | Guia Produto
+
+plusoftcrm.case.forms.crm_ticket.crm_case.edit.strategy.guiafurto
+Ocorrência Edição | Strategy | Guia Furto
+```
+
+Se um bloco tiver sido incluído por engano em outro form strategy, criar o form
+próprio, mover integralmente seus fragmentos XML/JavaScript/CSS e remover os
+fragmentos do form anterior na mesma publicação. Não duplicar IDs de fields ou
+handlers entre os dois forms.
 
 Após o cadastro, baixar o form recém-criado pela sua chave e publicar o design
 inicial. Para uma seção navegável de Pessoa, esse design já deve conter a row,
